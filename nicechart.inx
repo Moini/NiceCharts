@@ -58,7 +58,7 @@
       <param name="bar-width" type="int" _gui-text="Bar width:" min="0" max="100000">10</param>
       <param name="pie-radius" type="int" _gui-text="Pie radius:" min="0" max="100000">100</param>
       <param name="bar-offset" type="int" _gui-text="Bar offset:" min="0" max="100000">5</param>
-      <param name="stroke-width" type="int" _gui-text="Stroke width:" min="0" max="100000">2</param>
+      <param name="stroke-width" type="float" min="0.1" max="100000.0" precision="2" _gui-text="Stroke width:">1</param>
       <param name="text-offset" type="int" _gui-text="Offset between chart and labels:" min="0" max="100000">5</param>
       <param name="heading-offset" type="int" _gui-text="Offset between chart and chart title:" min="-100000" max="100000">50</param>
       <param name="segment-overlap" type="boolean" _gui-text="Work around aliasing effects (creates overlapping segments)">false</param>
@@ -101,4 +101,3 @@
     <command reldir="extensions" interpreter="python">nicechart.py</command>
   </script>
 </inkscape-extension>
-
