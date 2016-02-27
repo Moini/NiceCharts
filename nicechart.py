@@ -25,13 +25,12 @@
 #  
 
 # TODO / Ideas: 
-# make it work with different decimal separators (e.g. . ,)
 # allow negative values for bar charts
 # show values for stacked bar charts
 # don't create a new layer for each chart, but a normal group
-# correct bar height for stacked bars (double)
-# correct position of heading (move right)
-# use aliasing workaround for stacked bars (overlap)
+# correct bar height for stacked bars (it's only half as high as it should be, double)
+# adjust position of heading
+# use aliasing workaround for stacked bars (e.g. let the rectangles overlap)
 
 import sys
 import inkex
@@ -138,7 +137,7 @@ class NiceChart(inkex.Effect):
             help="distance between bars")
             
         self.OptionParser.add_option("", "--stroke-width", action="store",
-            type="int", dest="stroke_width", default='2')
+            type="float", dest="stroke_width", default='1')
             
         self.OptionParser.add_option("-o", "--text-offset", action="store",
             type="int", dest="text_offset", default='5',
@@ -205,7 +204,10 @@ class NiceChart(inkex.Effect):
                         heading = value[col_val]
                     else:
                         keys.append(value[col_key])
-                        values.append(float(value[col_val]))
+                        # replace comma decimal separator from file by colon, 
+                        # to avoid file editing for people whose programs output
+                        # values with comma
+                        values.append(float(value[col_val].replace(",",".")))
             csv_file.close()
             
         elif input_type == "\"direct_input\"":
@@ -383,7 +385,7 @@ class NiceChart(inkex.Effect):
 
                 # Increase Offset and Color
                 #offset=offset+bar_width+bar_offset
-                color = (color+1)%8
+                color = (color + 1) % 8
                 # Connect elements together.
                 if draw_blur:
                     layer.append(shadow)
@@ -413,7 +415,12 @@ class NiceChart(inkex.Effect):
                 
                 cnt = cnt+1
                 offset = offset + bar_width + bar_offset
-                
+            
+            # set x position for heading line
+            if not rotate:
+                heading_x = width/2 # TODO: adjust
+            else:
+                heading_x = width/2 # TODO: adjust
 
                 
         elif charttype == "pie":
@@ -525,6 +532,9 @@ class NiceChart(inkex.Effect):
                 # append the objects to the extension-layer
                 layer.append(pieslice)
                 
+            # set x position for heading line
+            heading_x = width/2 - pie_radius # TODO: adjust
+                
         elif charttype == "stbar":
         #################
         ###STACKED BAR###
@@ -592,6 +602,7 @@ class NiceChart(inkex.Effect):
                 rect.set("style", "fill:" + colors[color % color_count])
                 
                 #If text is given, draw short paths and add the text
+                # TODO: apply overlap workaround for visible gaps in between
                 if keys_present:
                     if not rotate:
                         path = inkex.etree.Element(inkex.addNS("path", "svg"))
@@ -636,11 +647,17 @@ class NiceChart(inkex.Effect):
                 # Draw rectangle
                 layer.append(rect)
                 i += 1
+            
+            # set x position for heading line
+            if not rotate:
+                heading_x = width/2 + offset + normedvalue # TODO: adjust
+            else:
+                heading_x = width/2 + offset + normedvalue # TODO: adjust
                 
         if headings and input_type == "\"file\"":
             headingtext = inkex.etree.Element(inkex.addNS('text', 'svg'))
             headingtext.set("y", str(height/2 + heading_offset))
-            headingtext.set("x", str(width/2))
+            headingtext.set("x", str(heading_x))
             headingtext.set("style", "font-size:" + str(font_size + 4)\
                     + "px;font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:"\
                     + font + ";-inkscape-font-specification:Bitstream Charter;text-align:end;text-anchor:end;fill:"\
