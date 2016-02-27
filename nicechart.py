@@ -24,10 +24,14 @@
 #  MA 02110-1301, USA.
 #  
 
-# TODO: 
-# use first line of csv file for table headings 
-# make it work with different decimal separators
+# TODO / Ideas: 
+# make it work with different decimal separators (e.g. . ,)
 # allow negative values for bar charts
+# show values for stacked bar charts
+# don't create a new layer for each chart, but a normal group
+# correct bar height for stacked bars (double)
+# correct position of heading (move right)
+# use aliasing workaround for stacked bars (overlap)
 
 import sys
 import inkex
@@ -108,6 +112,10 @@ class NiceChart(inkex.Effect):
         self.OptionParser.add_option("", "--encoding", action="store",
               type="string", dest="encoding", default='utf-8',
               help="encoding of the CSV file, e.g. utf-8")
+        
+        self.OptionParser.add_option("", "--headings", action="store",
+              type="inkbool", dest="headings", default='False',
+              help="the first line of the CSV file consists of headings for the columns")
               
         self.OptionParser.add_option("-r", "--rotate", action="store",
               type="inkbool", dest="rotate", default='False',
@@ -135,6 +143,10 @@ class NiceChart(inkex.Effect):
         self.OptionParser.add_option("-o", "--text-offset", action="store",
             type="int", dest="text_offset", default='5',
             help="distance between bar and descriptions")
+        
+        self.OptionParser.add_option("", "--heading-offset", action="store",
+            type="int", dest="heading_offset", default='50',
+            help="distance between chart and chart title")
         
         self.OptionParser.add_option("", "--segment-overlap", action="store",
             type="inkbool", dest="segment_overlap", default='False',
@@ -178,17 +190,24 @@ class NiceChart(inkex.Effect):
         col_val = self.options.col_val
         show_values = self.options.show_values
         encoding = self.options.encoding.strip() or 'utf-8'
+        headings = self.options.headings
+        heading_offset = self.options.heading_offset
         
         if input_type == "\"file\"":
             csv_file = open(csv_file_name, "r")
-            for line in csv_file:
+            
+            for linenum, line in enumerate(csv_file):
                 value = line.decode(encoding).split(csv_delimiter)
-  
                 #make sure that there is at least one value (someone may want to use it as description)
                 if len(value) >= 1:
-                    keys.append(value[col_key])
-                    values.append(float(value[col_val]))
+                    # allow to parse headings as strings
+                    if linenum == 0 and headings:
+                        heading = value[col_val]
+                    else:
+                        keys.append(value[col_key])
+                        values.append(float(value[col_val]))
             csv_file.close()
+            
         elif input_type == "\"direct_input\"":
             what = re.findall("([A-Z|a-z|0-9]+:[0-9]+\.?[0-9]*)", what)
             for value in what:
@@ -223,7 +242,25 @@ class NiceChart(inkex.Effect):
         
         # Check if a drop shadow should be drawn:
         draw_blur = self.options.blur
-        #draw_blur=False
+        
+        if draw_blur:
+            # Get defs of Document
+            defs = self.xpathSingle('/svg:svg//svg:defs')
+            if defs == None:
+                defs = inkex.etree.SubElement(self.document.getroot(), inkex.addNS('defs', 'svg'))
+            
+            # Create new Filter
+            filt = inkex.etree.SubElement(defs,inkex.addNS('filter', 'svg'))
+            filtId = self.uniqueId('filter')
+            self.filtId = 'filter:url(#%s);' % filtId
+            for k, v in [('id', filtId), ('height', "3"),
+                         ('width', "3"),
+                         ('x', '-0.5'), ('y', '-0.5')]:
+                filt.set(k, v)
+            
+            # Append Gaussian Blur to that Filter
+            fe = inkex.etree.SubElement(filt, inkex.addNS('feGaussianBlur', 'svg'))
+            fe.set('stdDeviation', "1.1")
         
         # Set Default Colors
         self.options.colors_override.strip()
@@ -284,30 +321,12 @@ class NiceChart(inkex.Effect):
             for x in range(len(values)):
                 orig_values.append(values[x])
                 values[x] = (values[x]/value_max) * bar_height
-            
-            # Get defs of Document
-            defs = self.xpathSingle('/svg:svg//svg:defs')
-            if defs == None:
-                defs = inkex.etree.SubElement(self.document.getroot(), inkex.addNS('defs', 'svg'))
-                
-            # Create new Filter
-            filt = inkex.etree.SubElement(defs, inkex.addNS('filter','svg'))
-            filtId = self.uniqueId('filter')
-            self.filtId = 'filter:url(#%s);' % filtId
-            for k, v in [('id', filtId), ('height', "3"),
-                         ('width', "3"),
-                         ('x', '-0.5'), ('y', '-0.5')]:
-                filt.set(k, v)
-            
-            # Append Gaussian Blur to that Filter
-            fe = inkex.etree.SubElement(filt,inkex.addNS('feGaussianBlur','svg'))
-            fe.set('stdDeviation', "1.1")
-             
+
             # Draw Single bars with their shadows
             for value in values:
                 
                 # draw drop shadow, if necessary
-                if(draw_blur):
+                if draw_blur:
                     # Create shadow element
                     shadow = inkex.etree.Element(inkex.addNS("rect", "svg"))
                     # Set chart position to center of document. Make it horizontal or vertical
@@ -404,29 +423,8 @@ class NiceChart(inkex.Effect):
             # Iterate all values to draw the different slices
             color = 0
             
-            # Set Default Colors
-            
-            # Get defs of Document
-            defs = self.xpathSingle('/svg:svg//svg:defs')
-            if defs == None:
-                    defs = inkex.etree.SubElement(self.document.getroot(), inkex.addNS('defs', 'svg'))
-                
-            # Create new Filter
-            filt = inkex.etree.SubElement(defs, inkex.addNS('filter', 'svg'))
-            filtId = self.uniqueId('filter')
-            self.filtId = 'filter:url(#%s);' % filtId
-            
-            for k, v in [('id', filtId), ('height', "3"),
-                         ('width', "3"),
-                         ('x', '-0.5'), ('y', '-0.5')]:
-                filt.set(k, v)
-            # Append Gaussian Blur to that Filter
-            fe = inkex.etree.SubElement(filt, inkex.addNS('feGaussianBlur', 'svg'))
-            fe.set('stdDeviation', "1.1")
-            
             # Create the shadow first (if it should be created):
             if draw_blur:
-                inkex.debug("drawing blur")
                 shadow = inkex.etree.Element(inkex.addNS("circle", "svg"))
                 shadow.set('cx', str(width/2))
                 shadow.set('cy', str(height/2))
@@ -533,22 +531,6 @@ class NiceChart(inkex.Effect):
         #################
             # Iterate over all values to draw the different slices
             color = 0
-            # Get defs of Document
-            defs = self.xpathSingle('/svg:svg//svg:defs')
-            if defs == None:
-                defs = inkex.etree.SubElement(self.document.getroot(), inkex.addNS('defs', 'svg'))
-                
-            # Create new Filter
-            filt = inkex.etree.SubElement(defs,inkex.addNS('filter', 'svg'))
-            filtId = self.uniqueId('filter')
-            self.filtId = 'filter:url(#%s);' % filtId
-            for k, v in [('id', filtId), ('height', "3"),
-                         ('width', "3"),
-                         ('x', '-0.5'), ('y', '-0.5')]:
-                filt.set(k, v)
-            # Append Gaussian Blur to that Filter
-            fe = inkex.etree.SubElement(filt, inkex.addNS('feGaussianBlur', 'svg'))
-            fe.set('stdDeviation', "1.1")
             
             #create value sum in order to divide the bars
             try:
@@ -561,32 +543,34 @@ class NiceChart(inkex.Effect):
             
             # Init offset
             offset = 0
-            i = len(values) - 1 #loopcounter
-            # Draw Single bars with their shadows
+            
+            if draw_blur:
+                # Create rectangle element
+                shadow = inkex.etree.Element(inkex.addNS("rect", "svg"))
+                # Set chart position to center of document.
+                if not rotate:
+                    shadow.set('x', str(width/2))
+                    shadow.set('y', str(height/2 - bar_height/2)) 
+                else:
+                    shadow.set('x', str(width/2))
+                    shadow.set('y', str(height/2))
+                # Set rectangle properties
+                if not rotate:
+                    shadow.set("width", str(bar_width))
+                    shadow.set("height", str(bar_height/2))
+                else:
+                    shadow.set("width",str(bar_height/2))
+                    shadow.set("height", str(bar_width))
+                # Set shadow blur (connect to filter object in xml path)
+                shadow.set("style", "filter:url(#filter)")
+                layer.append(shadow)
+            
+            i = 0
+            # Draw Single bars
             for value in values:
                 
                 # Calculate the individual heights normalized on 100units
                 normedvalue = (bar_height / valuesum) * float(value)
-                
-                if draw_blur:
-                    # Create rectangle element
-                    shadow = inkex.etree.Element(inkex.addNS("rect", "svg"))
-                    # Set chart position to center of document.
-                    if not rotate:
-                        shadow.set('x', str(width / 2 + 1))
-                        shadow.set('y', str(height / 2 - offset - (normedvalue) + 1)) 
-                    else:
-                        shadow.set('x', str(width / 2 + 1 + offset))
-                        shadow.set('y', str(height / 2 +1))
-                    # Set rectangle properties
-                    if not rotate:
-                        shadow.set("width", str(bar_width))
-                        shadow.set("height", str(normedvalue))
-                    else:
-                        shadow.set("width",str(normedvalue))
-                        shadow.set("height", str(bar_width))
-                    # Set shadow blur (connect to filter object in xml path)
-                    shadow.set("style", "filter:url(#filter)")
                 
                 # Create rectangle element
                 rect = inkex.etree.Element(inkex.addNS('rect', 'svg'))
@@ -649,12 +633,21 @@ class NiceChart(inkex.Effect):
                 offset = offset + normedvalue
                 color = (color + 1) % 8
                 
-                # Connect elements together.
-                if draw_blur:
-                    layer.append(shadow)
+                # Draw rectangle
                 layer.append(rect)
+                i += 1
                 
-                i -= 1 #loopcounter
+        if headings and input_type == "\"file\"":
+            headingtext = inkex.etree.Element(inkex.addNS('text', 'svg'))
+            headingtext.set("y", str(height/2 + heading_offset))
+            headingtext.set("x", str(width/2))
+            headingtext.set("style", "font-size:" + str(font_size + 4)\
+                    + "px;font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:"\
+                    + font + ";-inkscape-font-specification:Bitstream Charter;text-align:end;text-anchor:end;fill:"\
+                    + font_color)
+
+            headingtext.text = heading
+            layer.append(headingtext)
     
     def getUnittouu(self, param):
         try:
