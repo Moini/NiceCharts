@@ -38,11 +38,12 @@
           <param name="col_key" type="int" _gui-text="Column that contains the keys:" min="0" max="10000">0</param>
           <param name="col_val" type="int" _gui-text="Column that contains the values:" min="0" max="10000">1</param>
           <param name="encoding" type="string" _gui-text="File encoding (e.g. utf-8):">utf-8</param>
+          <param name="headings" type="boolean" _gui-text="First line contains headings">false</param>
         </page>
         <page name="direct_input" _gui-text="Direct input">
           <_param name="desc" type="description">Type in comma separated values:</_param>
-          <_param name="desc" type="description">(like apples:3,bananas:5)</_param>
-          <param name="what" type="string" _gui-text="Data:"></param>
+          <_param name="desc" type="description">(format like this: apples:3,bananas:5)</_param>
+          <param name="what" type="string" _gui-text="Data:">apples:3,bananas:5,oranges:10,pears:4</param>
         </page>
       </param>
     </page>
@@ -58,7 +59,8 @@
       <param name="pie-radius" type="int" _gui-text="Pie radius:" min="0" max="100000">100</param>
       <param name="bar-offset" type="int" _gui-text="Bar offset:" min="0" max="100000">5</param>
       <param name="stroke-width" type="int" _gui-text="Stroke width:" min="0" max="100000">2</param>
-      <param name="text-offset" type="int" _gui-text="Offset between chart and description:" min="0" max="100000">5</param>
+      <param name="text-offset" type="int" _gui-text="Offset between chart and labels:" min="0" max="100000">5</param>
+      <param name="heading-offset" type="int" _gui-text="Offset between chart and chart title:" min="-100000" max="100000">50</param>
       <param name="segment-overlap" type="boolean" _gui-text="Work around aliasing effects (creates overlapping segments)">false</param>
 
       <param name="colors" type="enum" _gui-text="Color scheme:">
@@ -99,3 +101,4 @@
     <command reldir="extensions" interpreter="python">nicechart.py</command>
   </script>
 </inkscape-extension>
+
