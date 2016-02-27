@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-
+# -*- coding: utf-8 -*-
 #  nicechart.py
 #
 #  Copyright 2011, 2016
@@ -23,22 +23,15 @@
 #  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
 #  MA 02110-1301, USA.
 #  
-#  
 
 # TODO: 
-# fix UTF-8 problem
 # use first line of csv file for table headings 
 # make it work with different decimal separators
-# localization 
-# fix drop shadow for pie chart (not one for each piece, only one for the whole circle)
+# allow negative values for bar charts
 
-# These two lines are only needed if you don't put the script directly into
-# the installation directory
 import sys
-#sys.path.append('/usr/share/inkscape/extensions')
-
-# We will use the inkex module with the predefined Effect base class.
 import inkex
+
 # The simplestyle module provides functions for style parsing.
 from simplestyle import *
 import math, re, nicechart_colors as nc_colors
@@ -112,6 +105,10 @@ class NiceChart(inkex.Effect):
               type="int", dest="col_val", default='1',
               help="column that contains the values")
               
+        self.OptionParser.add_option("", "--encoding", action="store",
+              type="string", dest="encoding", default='utf-8',
+              help="encoding of the CSV file, e.g. utf-8")
+              
         self.OptionParser.add_option("-r", "--rotate", action="store",
               type="inkbool", dest="rotate", default='False',
               help="Draw barchart horizontally")
@@ -138,6 +135,10 @@ class NiceChart(inkex.Effect):
         self.OptionParser.add_option("-o", "--text-offset", action="store",
             type="int", dest="text_offset", default='5',
             help="distance between bar and descriptions")
+        
+        self.OptionParser.add_option("", "--segment-overlap", action="store",
+            type="inkbool", dest="segment_overlap", default='False',
+            help="work around aliasing effects by letting pie chart segments overlap")
             
         self.OptionParser.add_option("-F", "--font", action="store",
             type="string", dest="font", default='sans-serif',
@@ -176,11 +177,13 @@ class NiceChart(inkex.Effect):
         col_key = self.options.col_key
         col_val = self.options.col_val
         show_values = self.options.show_values
+        encoding = self.options.encoding.strip() or 'utf-8'
         
         if input_type == "\"file\"":
             csv_file = open(csv_file_name, "r")
             for line in csv_file:
-                value = line.decode('utf8').split(csv_delimiter)
+                value = line.decode(encoding).split(csv_delimiter)
+  
                 #make sure that there is at least one value (someone may want to use it as description)
                 if len(value) >= 1:
                     keys.append(value[col_key])
@@ -192,6 +195,12 @@ class NiceChart(inkex.Effect):
                 value = value.split(":")
                 keys.append(value[0])
                 values.append(float(value[1]))
+
+        # warn about negative values (not yet supported)
+        for value in values:
+            if value < 0:
+              inkex.errormsg("Negative values are currently not supported!")
+              return
 
         # Get script's "--type" option value.
         charttype = self.options.type
@@ -243,6 +252,8 @@ class NiceChart(inkex.Effect):
         # offset of the description in stacked-bar-charts:
         # stacked_bar_text_offset=self.options.stacked_bar_text_offset
         text_offset = self.options.text_offset
+        # prevents ugly aliasing effects between pie chart segments by overlapping
+        segment_overlap = self.options.segment_overlap
         
         # get font
         font = self.options.font
@@ -413,18 +424,23 @@ class NiceChart(inkex.Effect):
             fe = inkex.etree.SubElement(filt, inkex.addNS('feGaussianBlur', 'svg'))
             fe.set('stdDeviation', "1.1")
             
-            # Add a grey background circle
+            # Create the shadow first (if it should be created):
+            if draw_blur:
+                inkex.debug("drawing blur")
+                shadow = inkex.etree.Element(inkex.addNS("circle", "svg"))
+                shadow.set('cx', str(width/2))
+                shadow.set('cy', str(height/2))
+                shadow.set('r', str(pie_radius))
+                shadow.set("style", "filter:url(#filter);fill:#000000")
+                layer.append(shadow)
+            
+            
+            # Add a grey background circle with a light stroke
             background = inkex.etree.Element(inkex.addNS("circle", "svg"))
             background.set("cx", str(width/2))
             background.set("cy", str(height/2))
             background.set("r", str(pie_radius))
-            
-            if pie_abs:
-                background.set("style", "stroke:#ececec;fill:#f9f9f9")
-            
-            else:
-                background.set("style", "fill:#aaaaaa;stroke:none")
-
+            background.set("style", "stroke:#ececec;fill:#f9f9f9")
             layer.append(background)
             
             #create value sum in order to divide the slices
@@ -434,30 +450,29 @@ class NiceChart(inkex.Effect):
             except ValueError:
                 valuesum = 0
 
-                
             if pie_abs:
                 valuesum = 100
+
+            num_values = len(values)
 
             # Set an offsetangle
             offset = 0
             
-            # Draw single slices with their shadow
-            for value in values:
+            # Draw single slices
+            for i in range(num_values):
+                value = values[i]
                 # Calculate the PI-angles for start and end
                 angle = (2*3.141592) / valuesum * float(value)
+                start = offset
+                end = offset + angle
                 
-                # Create the shadow first (if it should be created):
-                if(draw_blur):
-                    shadow = inkex.etree.Element(inkex.addNS("path", "svg"))
-                    shadow.set(inkex.addNS('type', 'sodipodi'), 'arc')
-                    shadow.set(inkex.addNS('cx', 'sodipodi'), str(width/2))
-                    shadow.set(inkex.addNS('cy', 'sodipodi'), str(height/2))
-                    shadow.set(inkex.addNS('rx', 'sodipodi'), str(pie_radius))
-                    shadow.set(inkex.addNS('ry', 'sodipodi'), str(pie_radius))
-                    shadow.set(inkex.addNS('start', 'sodipodi'), str(offset))
-                    shadow.set(inkex.addNS('end', 'sodipodi'), str(offset+angle))
-                    shadow.set("style", "filter:url(#filter);fill:#000000")
-                
+                # proper overlapping
+                if segment_overlap:
+                    if i != num_values-1:
+                        end += 0.09 # add a 5° overlap
+                    if i == 0:
+                        start -= 0.09 # let the first element overlap into the other direction
+
                 #then add the slice
                 pieslice = inkex.etree.Element(inkex.addNS("path", "svg"))
                 pieslice.set(inkex.addNS('type', 'sodipodi'), 'arc')
@@ -465,8 +480,8 @@ class NiceChart(inkex.Effect):
                 pieslice.set(inkex.addNS('cy', 'sodipodi'), str(height/2))
                 pieslice.set(inkex.addNS('rx', 'sodipodi'), str(pie_radius))
                 pieslice.set(inkex.addNS('ry', 'sodipodi'), str(pie_radius))
-                pieslice.set(inkex.addNS('start', 'sodipodi'), str(offset))
-                pieslice.set(inkex.addNS('end', 'sodipodi'), str(offset + angle))
+                pieslice.set(inkex.addNS('start', 'sodipodi'), str(start))
+                pieslice.set(inkex.addNS('end', 'sodipodi'), str(end))
                 pieslice.set("style", "fill:"+ colors[color % color_count] + ";stroke:none;fill-opacity:1")
                 
                 #If text is given, draw short paths and add the text
@@ -510,9 +525,8 @@ class NiceChart(inkex.Effect):
                 color = (color + 1) % 8
                 
                 # append the objects to the extension-layer
-                if draw_blur:
-                    layer.append(shadow)
                 layer.append(pieslice)
+                
         elif charttype == "stbar":
         #################
         ###STACKED BAR###
